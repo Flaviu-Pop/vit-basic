@@ -11,15 +11,20 @@ from torch import nn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
-
-############################################# ----- LOADING THE DATA ----- #############################################
+# ----------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------- LOADING THE DATA ---------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
+# We set the mean and standard deviation, respectively
 cifar10_mean = torch.tensor([0.49139968, 0.48215827, 0.44653124])
 cifar10_std = torch.tensor([0.24703233, 0.24348505, 0.26158767])
 
-data_path = 'C:\Learning\Computer Science\Machine Learning\\02 Databases Used\CV Datasets\Multi Class Classification Datasets\CIFAR 10\data\cifar10'
+# We set the path's root of the dataset
+data_path = 'C:\Datasets\CIFAR 10\data\cifar10'
 
+# We set the batch size we are working on
 batch_size = 128
 
+# We set the training, validation and test dataset sizes, respectively
 train_size = 1280
 val_size = 640
 test_size = 1280
@@ -41,14 +46,12 @@ class Cifar10_Dataset(Dataset):
             download=True
         )
 
-        # We consider only a subset of Cifar 10 dataset (for time and computing resources)
+        # We consider only a subset of CIFAR10 dataset (for time and computing resources)
         mask = list(range(0, len(self.dataset), 8))
         self.dataset = torch.utils.data.Subset(self.dataset, mask)
 
-
     def __len__(self):
         return len(self.dataset)
-
 
     def __getitem__(self, idx):
         img, label = self.dataset[idx]
@@ -63,16 +66,14 @@ train_set = Cifar10_Dataset(True)
 train_set, val_set, _ = torch.utils.data.random_split(train_set,
                                                       [train_size, val_size, len(train_set) - train_size - val_size])
 
-
 # We download the CIFAR10 dataset for testing, if it does not exist at the specified path
 test_set = Cifar10_Dataset(False)
 
 # We consider only a part of the data for testing (for computational cost reasons)
-test_set, _  = torch.utils.data.random_split(test_set,
-                                             [test_size, len(test_set) - test_size])
+test_set, _ = torch.utils.data.random_split(test_set,
+                                            [test_size, len(test_set) - test_size])
 
-
-# We set the DataLoader corresponding to each set
+# We set the DataLoaders corresponding to each set
 train_loader = DataLoader(
     train_set,
     batch_size=batch_size,
@@ -95,10 +96,10 @@ test_loader = DataLoader(
 )
 
 
-classes = ('plane', 'car', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
+# ----------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------- THE ARCHITECTURE ---------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 
-
-############################################# ----- THE ARCHITECTURE ------  ###########################################
 # First, we define the Multi-Self Attention block
 class MSA(nn.Module):
     def __init__(self, input_dim, embed_dim, num_heads):
@@ -113,7 +114,6 @@ class MSA(nn.Module):
         self.V_embed = nn.Linear(input_dim, embed_dim, bias=False)
 
         self.out_embed = nn.Linear(embed_dim, embed_dim, bias=False)
-
 
     def forward(self, x):
         batch_size, max_length, given_input_dim = x.shape
@@ -160,7 +160,7 @@ class MSA(nn.Module):
 
 # Second, we define an ViT layer
 class ViTLayer(nn.Module):
-    def __init__(self, num_heads, input_dim, embed_dim, mlp_hidden_dim, dropout = 0.1):
+    def __init__(self, num_heads, input_dim, embed_dim, mlp_hidden_dim, dropout=0.1):
         super().__init__()
 
         self.input_dim = input_dim
@@ -178,7 +178,6 @@ class ViTLayer(nn.Module):
             nn.Dropout(dropout)
         )
 
-
     def forward(self, x):
         x = self.layernorm1(x)
         x = self.msa(x)
@@ -190,7 +189,7 @@ class ViTLayer(nn.Module):
         return x
 
 
-# Now, we define the ViT architecture
+# Third, we define the ViT architecture
 class ViT(nn.Module):
     def __init__(self, patch_dim, image_dim, num_layers, num_heads, embed_dim, mlp_hidden_dim, num_classes, dropout):
         super().__init__()
@@ -202,7 +201,7 @@ class ViT(nn.Module):
         self.num_heads = num_heads
 
         self.patch_embedding = nn.Linear(self.input_dim, embed_dim)
-        self.position_embedding = nn.Parameter(torch.zeros(1, (image_dim//patch_dim)**2+1, embed_dim))
+        self.position_embedding = nn.Parameter(torch.zeros(1, (image_dim // patch_dim) ** 2 + 1, embed_dim))
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.embedding_dropout = nn.Dropout(dropout)
 
@@ -215,12 +214,12 @@ class ViT(nn.Module):
         self.layernorm = nn.LayerNorm(embed_dim)
 
     def forward(self, images):
-        h = w = self.image_dim//self.patch_dim
+        h = w = self.image_dim // self.patch_dim
         N = images.size(0)
 
         images = images.reshape(N, 3, h, self.patch_dim, w, self.patch_dim)
         images = torch.einsum("nchpwq -> nhwpqc", images)
-        patches = images.reshape(N, h*w, self.input_dim)
+        patches = images.reshape(N, h * w, self.input_dim)
 
         patch_embeddings = self.patch_embedding(patches)
         patch_embeddings = torch.cat([torch.tile(self.cls_token, (N, 1, 1)), patch_embeddings], dim=1)
@@ -236,18 +235,19 @@ class ViT(nn.Module):
         for i in range(self.num_layers):
             out = self.encoder_layers[i](out)
 
-        cls_head = self.layernorm(torch.squeeze(out[:,0], dim=1))
+        cls_head = self.layernorm(torch.squeeze(out[:, 0], dim=1))
         logits = self.mlp_head(cls_head)
 
         return logits
 
 
-
-################################################ ----- DEFINE SOME VITs ----- ##########################################
+# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------- DEFINE SOME VITs ------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 def get_vit_tiny(num_classes=10, patch_dim=4, image_dim=32):
     return ViT(
-        patch_dim = patch_dim,
-        image_dim = image_dim,
+        patch_dim=patch_dim,
+        image_dim=image_dim,
         num_layers=12,
         num_heads=3,
         embed_dim=192,
@@ -268,11 +268,13 @@ def get_vit_small(num_classes=10, patch_dim=4, image_dim=32):
         dropout=0.1)
 
 
-#################################################### ----- TRAINING ----- ##############################################
+# ----------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------- TRAINING -----------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 def compute_accuracy(model, data_loader, criterion):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)     # Set the model to GPU if available
-    model.eval()      # Set the model to the evaluation mode
+    model = model.to(device)  # Set the model to GPU if available
+    model.eval()  # Set the model to the evaluation mode
 
     data_loss = 0.0
     data_acc = 0.0
@@ -280,7 +282,7 @@ def compute_accuracy(model, data_loader, criterion):
 
     with torch.no_grad():
         for inputs, labels in tqdm(data_loader):
-            inputs, labels = inputs.to(device), labels.to(device)     # Set the data to GPU if available
+            inputs, labels = inputs.to(device), labels.to(device)  # Set the data to GPU if available
 
             outputs = model(inputs)
 
@@ -288,10 +290,10 @@ def compute_accuracy(model, data_loader, criterion):
             data_loss += loss.item()
             data_correct += torch.sum(torch.argmax(outputs, dim=1) == labels).item()
 
-    data_loss = data_loss/(len(data_loader)*batch_size)
-    data_acc = data_correct/(len(data_loader)*batch_size)
+    data_loss = data_loss / (len(data_loader) * batch_size)
+    data_acc = data_correct / (len(data_loader) * batch_size)
 
-    print(f"\nThere are {data_correct} correct predictions --- out of {len(data_loader)*batch_size} elements")
+    print(f"\nThere are {data_correct} correct predictions --- out of {len(data_loader) * batch_size} elements")
 
     return data_loss, data_acc
 
@@ -300,7 +302,7 @@ def training(model, train_loader, val_loader, test_loader, num_epochs, criterion
     print("\n\n\n ----- Training Process of ViT -----")
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = model.to(device)     # Set the model to GPU if available
+    model = model.to(device)  # Set the model to GPU if available
 
     best_accuracy = -np.inf
     best_weights = None
@@ -308,14 +310,14 @@ def training(model, train_loader, val_loader, test_loader, num_epochs, criterion
 
     for epoch in range(num_epochs):
         start_time = time.perf_counter()
-        model.train()     # Set the model to the training mode
+        model.train()  # Set the model to the training mode
 
         train_loss = 0.0
         train_acc = 0.0
         train_total = 0
 
         for inputs, labels in tqdm(train_loader):
-            inputs, labels = inputs.to(device), labels.to(device)     # Set the data to GPU if available
+            inputs, labels = inputs.to(device), labels.to(device)  # Set the data to GPU if available
 
             # Forward and Backward passes
             optimizer.zero_grad()
@@ -325,14 +327,15 @@ def training(model, train_loader, val_loader, test_loader, num_epochs, criterion
             optimizer.step()
 
             train_loss += loss
-            train_acc += torch.sum( (torch.argmax(outputs, dim=1) == labels) ).item()
+            train_acc += torch.sum(torch.argmax(outputs, dim=1) == labels).item()
 
-        train_loss = train_loss/(len(train_loader)*batch_size)
-        train_acc = train_acc/(len(train_loader)*batch_size)
+        train_loss = train_loss / (len(train_loader) * batch_size)
+        train_acc = train_acc / (len(train_loader) * batch_size)
 
         # Take the model('s weights) with the best accuracy
         print(f"\n Computing the Validation Accuracy for Epoch {epoch + 1}:")
-        validation_loss, validation_accuracy = compute_accuracy(model=model, data_loader=val_loader, criterion=criterion)
+        validation_loss, validation_accuracy = compute_accuracy(model=model, data_loader=val_loader,
+                                                                criterion=criterion)
 
         if validation_accuracy > best_accuracy:
             best_accuracy = validation_accuracy
@@ -355,14 +358,16 @@ def training(model, train_loader, val_loader, test_loader, num_epochs, criterion
     torch.save(model, model_path)
 
 
-################################################ ----- MAIN() ----- ####################################################
+# ----------------------------------------------------------------------------------------------------------------------
+# ---------------------------------------------------- MAIN ------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     vit = get_vit_small().to(device)
     vit = torch.nn.DataParallel(vit)
 
-    num_epochs = 25
+    num_epochs = 2
     learning_rate = 1e-3
     weight_decay = 0.1
 
